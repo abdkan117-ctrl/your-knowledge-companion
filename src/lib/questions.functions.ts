@@ -155,8 +155,8 @@ function clean(data: QuestionInput): QuestionInput {
     return {
       question: String(data.question || "").trim().slice(0, 400),
       option_a: String(data.option_a || "").trim().slice(0, 200),
-      option_b: "",
-      option_c: "",
+      option_b: String(data.option_b || "").trim().slice(0, 200),
+      option_c: String(data.option_c || "").trim().slice(0, 200),
       option_d: "",
       correct_answer: "A",
       question_type: type,
@@ -170,14 +170,18 @@ function clean(data: QuestionInput): QuestionInput {
     option_b: String(data.option_b || "").trim().slice(0, 200),
     option_c: String(data.option_c || "").trim().slice(0, 200),
     option_d: String(data.option_d || "").trim().slice(0, 200),
-    correct_answer: String(data.correct_answer || "A").toUpperCase().slice(0, 1),
+    correct_answer:
+      Array.from(new Set(String(data.correct_answer || "A").toUpperCase().split("")))
+        .filter((l) => ["A", "B", "C", "D"].includes(l))
+        .sort()
+        .join("") || "A",
     category: data.category ? String(data.category).trim().slice(0, 60) : undefined,
   };
 }
 
 function validate(d: QuestionInput) {
   if (!d.question) throw new Error("Soru metni gerekli");
-  if (!["A", "B", "C", "D"].includes(d.correct_answer))
+  if (!d.correct_answer || !d.correct_answer.split("").every((l) => ["A", "B", "C", "D"].includes(l)))
     throw new Error("Doğru cevap A, B, C veya D olmalı");
 }
 

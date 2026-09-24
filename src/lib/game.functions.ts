@@ -238,7 +238,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
 
     const { data: q } = await supabase
       .from("questions")
-      .select("correct_answer, option_a, question_type")
+      .select("correct_answer, option_a, option_b, option_c, option_d, question_type")
       .eq("id", currentId)
       .maybeSingle();
     if (!q) throw new Error("Soru bulunamadı");
@@ -254,8 +254,11 @@ export const submitAnswer = createServerFn({ method: "POST" })
     const norm = (v: string) => v.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
     const isCorrect =
       q.question_type === "fill"
-        ? norm(q.option_a) === norm(data.answer)
-        : q.correct_answer.toUpperCase() === data.answer.toUpperCase();
+        ? [q.option_a, q.option_b, q.option_c, q.option_d]
+            .filter((v) => v && v.trim())
+            .some((v) => norm(v) === norm(data.answer))
+        : data.answer.length === 1 &&
+          q.correct_answer.toUpperCase().includes(data.answer.toUpperCase());
     const mine = (existing ?? []).find((a) => a.player_id === player.id);
     if (mine) {
       const { error: updErr } = await supabase
