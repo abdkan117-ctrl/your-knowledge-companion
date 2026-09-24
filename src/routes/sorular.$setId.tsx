@@ -139,6 +139,15 @@ function QuestionsPage() {
   const set = (key: keyof typeof empty, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
+  const toggleCorrect = (letter: Letter) =>
+    setForm((current) => {
+      const has = current.correct_answer.includes(letter);
+      const next = has
+        ? current.correct_answer.replace(letter, "")
+        : [...current.correct_answer.split(""), letter].sort().join("");
+      return { ...current, correct_answer: next || (has ? current.correct_answer : letter) };
+    });
+
   const questions = list.data ?? [];
   const total = questions.length;
   const selectedIndex = questions.findIndex((question) => question.id === selectedId);
@@ -185,7 +194,7 @@ function QuestionsPage() {
       return false;
     }
     const filled: Record<string, string> = { A: a, B: b, C: c, D: d };
-    if (!silent && type === "multiple" && !filled[snapshot.correct_answer]) {
+    if (!silent && type === "multiple" && !snapshot.correct_answer.split("").some((l) => filled[l])) {
       setError("Doğru cevap olarak dolu bir seçenek seçin");
       return false;
     }
@@ -502,19 +511,29 @@ function QuestionsPage() {
 
             <div className="mt-5 lg:mt-4">
               <h2 className="font-studio-display text-base text-studio-ink">
-                {form.question_type === "fill" ? "DOĞRU CEVAP" : form.question_type === "truefalse" ? "DOĞRU MU, YANLIŞ MI?" : "CEVAP SEÇENEKLERİ"}
+                {form.question_type === "fill" ? "DOĞRU CEVAPLAR" : form.question_type === "truefalse" ? "DOĞRU MU, YANLIŞ MI?" : "CEVAP SEÇENEKLERİ"}
+              </h2>
+              {form.question_type === "multiple" && (
+                <p className="mt-1 text-xs text-studio-muted">Birden fazla doğru cevap işaretleyebilirsin.</p>
+              )}
+              <h2 className="hidden">
               </h2>
             </div>
 
             {form.question_type === "fill" && (
               <div className="mt-4 lg:mt-3">
-                <input
-                  value={form.option_a}
-                  onChange={(event) => set("option_a", event.target.value)}
-                  placeholder="Boşluğa gelecek doğru cevap"
-                  aria-label="Doğru cevap"
-                  className="h-14 w-full rounded-xl border border-studio-yellow bg-studio-yellow/10 px-4 text-base font-semibold text-studio-ink outline-hidden placeholder:text-studio-muted/60"
-                />
+                <div className="grid gap-2">
+                  {(["option_a", "option_b", "option_c"] as const).map((key, i) => (
+                    <input
+                      key={key}
+                      value={form[key]}
+                      onChange={(event) => set(key, event.target.value)}
+                      placeholder={i === 0 ? "Doğru cevap" : `Kabul edilen ${i + 1}. cevap (isteğe bağlı)`}
+                      aria-label={`${i + 1}. doğru cevap`}
+                      className={`h-14 w-full rounded-xl border px-4 text-base font-semibold text-studio-ink outline-hidden placeholder:text-studio-muted/60 ${i === 0 ? "border-studio-yellow bg-studio-yellow/10" : "border-studio-line bg-studio-elevated/60 focus:border-studio-yellow"}`}
+                    />
+                  ))}
+                </div>
                 <p className="mt-2 text-xs text-studio-muted">Büyük/küçük harf ve fazla boşluk fark etmez.</p>
               </div>
             )}
@@ -542,7 +561,7 @@ function QuestionsPage() {
               {LETTERS.map((letter, index) => {
                 const key = `option_${letter.toLowerCase()}` as "option_a";
                 const value = form[key];
-                const correct = form.correct_answer === letter;
+                const correct = form.correct_answer.includes(letter);
                 const optional = index >= 2;
                 return (
                   <div
@@ -560,7 +579,7 @@ function QuestionsPage() {
                       value={value}
                       onChange={(event) => {
                         set(key, event.target.value);
-                        if (correct && !event.target.value.trim()) set("correct_answer", "A");
+                        if (correct && !event.target.value.trim()) toggleCorrect(letter);
                       }}
                       placeholder={optional ? "İsteğe bağlı cevap" : `Cevap ${index + 1}`}
                       aria-label={`${letter} cevap seçeneği`}
@@ -570,9 +589,9 @@ function QuestionsPage() {
                       type="button"
                       size="icon"
                       aria-label={`${letter} seçeneğini doğru yanıt olarak işaretle`}
-                      title="Doğru yanıt olarak işaretle"
+                      title="Doğru yanıt olarak işaretle / kaldır"
                       disabled={!value.trim()}
-                      onClick={() => set("correct_answer", letter as Letter)}
+                      onClick={() => toggleCorrect(letter)}
                       className={`h-10 w-10 shrink-0 rounded-full border ${
                         correct
                           ? "border-studio-yellow bg-studio-yellow text-studio-bg hover:bg-studio-yellow"
