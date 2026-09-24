@@ -53,7 +53,14 @@ const empty = {
   option_c: "",
   option_d: "",
   correct_answer: "A",
+  question_type: "multiple",
 };
+
+const TYPES = [
+  { id: "multiple", label: "Çoktan Seçmeli" },
+  { id: "truefalse", label: "Doğru / Yanlış" },
+  { id: "fill", label: "Boşluk Doldurma" },
+] as const;
 
 function QuestionsPage() {
   const { setId } = Route.useParams();
@@ -122,6 +129,7 @@ function QuestionsPage() {
         option_c: question.option_c,
         option_d: question.option_d,
         correct_answer: question.correct_answer.toUpperCase(),
+        question_type: question.question_type || "multiple",
       };
       setForm(loaded);
       lastSavedRef.current = JSON.stringify(loaded);
@@ -167,12 +175,17 @@ function QuestionsPage() {
       else setAutoStatus("Taslak — henüz kaydedilmedi");
       return false;
     }
-    if (!silent && (!a || !b)) {
+    const type = snapshot.question_type;
+    if (!silent && type === "fill" && !a) {
+      setError("Doğru cevabı yazın");
+      return false;
+    }
+    if (!silent && type === "multiple" && (!a || !b)) {
       setError("İlk iki cevap (A ve B) zorunlu");
       return false;
     }
     const filled: Record<string, string> = { A: a, B: b, C: c, D: d };
-    if (!silent && !filled[snapshot.correct_answer]) {
+    if (!silent && type === "multiple" && !filled[snapshot.correct_answer]) {
       setError("Doğru cevap olarak dolu bir seçenek seçin");
       return false;
     }
@@ -371,7 +384,7 @@ function QuestionsPage() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{question.question || "Boş soru"}</span>
                       <span className="mt-0.5 block text-xs text-studio-muted">
-                        {question.option_a.trim() && question.option_b.trim() ? `Doğru yanıt: ${question.correct_answer.toUpperCase()}` : <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3.5 w-3.5" /> Taslak — seçenekler eksik</span>}
+                        {question.question_type === "fill" ? (question.option_a.trim() ? `Boşluk · ${question.option_a}` : <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3.5 w-3.5" /> Taslak — cevap eksik</span>) : question.question_type === "truefalse" ? `D/Y · ${question.correct_answer.toUpperCase() === "A" ? "Doğru" : "Yanlış"}` : question.option_a.trim() && question.option_b.trim() ? `Doğru yanıt: ${question.correct_answer.toUpperCase()}` : <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3.5 w-3.5" /> Taslak — seçenekler eksik</span>}
                       </span>
                     </span>
                   </Button>
@@ -446,6 +459,33 @@ function QuestionsPage() {
               </div>
             )}
 
+            <div className="mb-4 flex flex-wrap gap-2" role="radiogroup" aria-label="Soru türü">
+              {TYPES.map((t) => {
+                const active = form.question_type === t.id;
+                return (
+                  <Button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() =>
+                      setForm((current) => {
+                        if (current.question_type === t.id) return current;
+                        if (t.id === "truefalse")
+                          return { ...current, question_type: t.id, option_a: "Doğru", option_b: "Yanlış", option_c: "", option_d: "", correct_answer: "A" };
+                        if (t.id === "fill")
+                          return { ...current, question_type: t.id, option_a: "", option_b: "", option_c: "", option_d: "", correct_answer: "A" };
+                        return { ...current, question_type: t.id, option_a: "", option_b: "", correct_answer: "A" };
+                      })
+                    }
+                    className={`h-10 rounded-lg px-4 font-bold ${active ? "bg-studio-yellow text-studio-bg hover:bg-studio-yellow/90" : "border border-studio-line bg-transparent text-studio-muted hover:bg-studio-elevated hover:text-studio-ink"}`}
+                  >
+                    {t.label}
+                  </Button>
+                );
+              })}
+            </div>
+
             <div>
               <label htmlFor="question-text" className="mb-2 block text-xs font-bold uppercase text-studio-muted">
                 Soru metni
@@ -455,15 +495,49 @@ function QuestionsPage() {
                 value={form.question}
                 onChange={(event) => set("question", event.target.value)}
                 rows={3}
-                placeholder="Sorunuzu buraya yazın..."
+                placeholder={form.question_type === "fill" ? "Örn: Türkiye'nin başkenti ____ şehridir." : "Sorunuzu buraya yazın..."}
                 className="h-24 w-full resize-none rounded-xl border border-studio-line bg-studio-elevated/60 p-4 text-lg font-semibold text-studio-ink outline-hidden placeholder:text-studio-muted/60 focus:border-studio-yellow focus:ring-2 focus:ring-studio-yellow/20 sm:text-xl lg:h-16 lg:py-3"
               />
             </div>
 
             <div className="mt-5 lg:mt-4">
-              <h2 className="font-studio-display text-base text-studio-ink">CEVAP SEÇENEKLERİ</h2>
+              <h2 className="font-studio-display text-base text-studio-ink">
+                {form.question_type === "fill" ? "DOĞRU CEVAP" : form.question_type === "truefalse" ? "DOĞRU MU, YANLIŞ MI?" : "CEVAP SEÇENEKLERİ"}
+              </h2>
             </div>
 
+            {form.question_type === "fill" && (
+              <div className="mt-4 lg:mt-3">
+                <input
+                  value={form.option_a}
+                  onChange={(event) => set("option_a", event.target.value)}
+                  placeholder="Boşluğa gelecek doğru cevap"
+                  aria-label="Doğru cevap"
+                  className="h-14 w-full rounded-xl border border-studio-yellow bg-studio-yellow/10 px-4 text-base font-semibold text-studio-ink outline-hidden placeholder:text-studio-muted/60"
+                />
+                <p className="mt-2 text-xs text-studio-muted">Büyük/küçük harf ve fazla boşluk fark etmez.</p>
+              </div>
+            )}
+
+            {form.question_type === "truefalse" && (
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:mt-3">
+                {(["A", "B"] as const).map((letter) => {
+                  const correct = form.correct_answer === letter;
+                  return (
+                    <Button
+                      key={letter}
+                      type="button"
+                      onClick={() => set("correct_answer", letter)}
+                      className={`h-16 rounded-xl border text-lg font-bold ${correct ? "border-studio-yellow bg-studio-yellow text-studio-bg hover:bg-studio-yellow" : "border-studio-line bg-studio-elevated/60 text-studio-ink hover:bg-studio-line"}`}
+                    >
+                      {correct && <Check />} {letter === "A" ? "Doğru" : "Yanlış"}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+
+            {form.question_type === "multiple" && (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:mt-3 lg:gap-2">
               {LETTERS.map((letter, index) => {
                 const key = `option_${letter.toLowerCase()}` as "option_a";
@@ -511,6 +585,7 @@ function QuestionsPage() {
                 );
               })}
             </div>
+            )}
 
             <div className="mt-5 grid gap-3 border-t border-studio-line pt-4 sm:grid-cols-[auto_1fr] sm:items-center lg:mt-4 lg:pt-3">
               <div className="flex gap-2 sm:hidden">

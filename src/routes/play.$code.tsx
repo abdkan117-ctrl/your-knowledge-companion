@@ -106,6 +106,12 @@ function GameView({ code, playerId }: { code: string; playerId: string }) {
   const ping = useServerFn(heartbeat);
   const [sending, setSending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+  const questionIndex = data?.question?.index;
+
+  useEffect(() => {
+    setTyped("");
+  }, [questionIndex]);
 
   useEffect(() => {
     const id = setInterval(() => void ping({ data: { playerId } }), 15000);
@@ -182,8 +188,44 @@ function GameView({ code, playerId }: { code: string; playerId: string }) {
           </p>
           <h2 className="mt-2 text-xl font-extrabold leading-snug text-foreground">{q.question}</h2>
 
+          {q.type === "fill" ? (
+            <form
+              className="mt-5 grid gap-3"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (!typed.trim()) return;
+                setSending("fill");
+                setError(null);
+                try {
+                  await answer({ data: { code, playerId, answer: typed } });
+                  await refetch();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Gönderilemedi");
+                } finally {
+                  setSending(null);
+                }
+              }}
+            >
+              <input
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+                maxLength={200}
+                placeholder="Cevabını yaz..."
+                aria-label="Cevabın"
+                disabled={data.resolved || data.me?.isCorrect === true || data.status !== "PLAYING"}
+                className="rounded-2xl border-2 border-border bg-background px-4 py-4 text-base font-semibold text-foreground outline-none focus:border-foreground"
+              />
+              <button
+                type="submit"
+                disabled={data.resolved || data.me?.isCorrect === true || data.status !== "PLAYING" || !!sending || !typed.trim()}
+                className="rounded-2xl bg-foreground py-4 font-bold text-background disabled:opacity-60"
+              >
+                {sending ? "GÖNDERİLİYOR..." : "GÖNDER"}
+              </button>
+            </form>
+          ) : (
           <div className="mt-5 grid gap-3">
-            {LETTERS.map((letter) => {
+            {LETTERS.filter((letter) => q.options[letter]?.trim()).map((letter) => {
               const chosen = data.me?.answer === letter;
               return (
                 <button
@@ -215,6 +257,7 @@ function GameView({ code, playerId }: { code: string; playerId: string }) {
               );
             })}
           </div>
+          )}
 
           {data.me && (
             <div className="mt-5 text-center">
