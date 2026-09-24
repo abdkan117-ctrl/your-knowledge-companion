@@ -11,6 +11,7 @@ export type PublicQuestion = {
   total: number;
   question: string;
   options: { A: string; B: string; C: string; D: string };
+  type: "multiple" | "truefalse" | "fill";
   category: string;
   difficulty: string;
 };
@@ -71,21 +72,21 @@ export const createRoom = createServerFn({ method: "POST" })
   if (input.setId) {
     const { data: qs, error } = await supabase
       .from("questions")
-      .select("id, question, option_a, option_b")
+      .select("id, question, option_a, option_b, question_type")
       .eq("set_id", input.setId)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     questionIds = (qs ?? [])
-      .filter((q) => q.question.trim() && q.option_a.trim() && q.option_b.trim())
+      .filter((q) => q.question.trim() && q.option_a.trim() && (q.question_type === "fill" || q.option_b.trim()))
       .map((q) => q.id);
     if (!questionIds.length) throw new Error("Bu sette tamamlanmış soru yok");
   } else {
     const { data: questions, error: qErr } = await supabase
       .from("questions")
-      .select("id, question, option_a, option_b");
+      .select("id, question, option_a, option_b, question_type");
     if (qErr) throw new Error(qErr.message);
     questionIds = (questions ?? [])
-      .filter((q) => q.question.trim() && q.option_a.trim() && q.option_b.trim())
+      .filter((q) => q.question.trim() && q.option_a.trim() && (q.question_type === "fill" || q.option_b.trim()))
       .map((q) => q.id)
       .sort(() => Math.random() - 0.5)
       .slice(0, QUESTION_COUNT);
@@ -165,7 +166,7 @@ export const getRoomState = createServerFn({ method: "POST" })
     if (currentId && room.status !== "WAITING" && room.status !== "READY") {
       const { data: q } = await supabase
         .from("questions")
-        .select("question, option_a, option_b, option_c, option_d, category, difficulty")
+        .select("question, option_a, option_b, option_c, option_d, question_type, category, difficulty")
         .eq("id", currentId)
         .maybeSingle();
       if (q) {
@@ -173,7 +174,11 @@ export const getRoomState = createServerFn({ method: "POST" })
           index: room.current_question + 1,
           total: questionIds.length,
           question: q.question,
-          options: { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d },
+          type: (q.question_type as PublicQuestion["type"]) ?? "multiple",
+          options:
+            q.question_type === "fill"
+              ? { A: "", B: "", C: "", D: "" }
+              : { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d },
           category: q.category,
           difficulty: q.difficulty,
         };
@@ -212,10 +217,10 @@ export const submitAnswer = createServerFn({ method: "POST" })
   .inputValidator((data: { code: string; playerId: string; answer: string }) => ({
     code: String(data.code || "").trim().toUpperCase(),
     playerId: String(data.playerId),
-    answer: String(data.answer || "").toUpperCase().slice(0, 1),
+    answer: String(data.answer || "").trim().slice(0, 200),
   }))
   .handler(async ({ data }) => {
-    if (!["A", "B", "C", "D"].includes(data.answer)) throw new Error("Geçersiz cevap");
+    if (!data.answer) throw new Error("Cevap boş olamaz");
     const supabase = await db();
     const room = await loadRoom(data.code);
     if (room.status !== "PLAYING") throw new Error("Şu anda cevap verilemez");
@@ -233,7 +238,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
 
     const { data: q } = await supabase
       .from("questions")
-      .select("correct_answer")
+      .select("correct_answer, option_a, question_type")
       .eq("id", currentId)
       .maybeSingle();
     if (!q) throw new Error("Soru bulunamadı");
@@ -246,7 +251,11 @@ export const submitAnswer = createServerFn({ method: "POST" })
     if ((existing ?? []).some((a) => a.is_correct))
       throw new Error("Bu soru çözüldü, sıradaki soru geliyor");
 
-    const isCorrect = q.correct_answer.toUpperCase() === data.answer;
+    const norm = (v: string) => v.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
+    const isCorrect =
+      q.question_type === "fill"
+        ? norm(q.option_a) === norm(data.answer)
+        : q.correct_answer.toUpperCase() === data.answer.toUpperCase();
     const mine = (existing ?? []).find((a) => a.player_id === player.id);
     if (mine) {
       const { error: updErr } = await supabase

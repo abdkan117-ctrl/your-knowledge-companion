@@ -8,6 +8,7 @@ export type QuestionRow = {
   option_c: string;
   option_d: string;
   correct_answer: string;
+  question_type: string;
   category: string;
   difficulty: string;
 };
@@ -114,7 +115,7 @@ export const listQuestions = createServerFn({ method: "POST" })
     let query = supabase
       .from("questions")
       .select(
-        "id, question, option_a, option_b, option_c, option_d, correct_answer, category, difficulty",
+        "id, question, option_a, option_b, option_c, option_d, correct_answer, question_type, category, difficulty",
       )
       .order("created_at", { ascending: true });
     if (data.setId) query = query.eq("set_id", data.setId);
@@ -130,11 +131,40 @@ type QuestionInput = {
   option_c: string;
   option_d: string;
   correct_answer: string;
+  question_type?: string;
   category?: string | undefined;
 };
 
 function clean(data: QuestionInput): QuestionInput {
+  const type = ["multiple", "truefalse", "fill"].includes(String(data.question_type))
+    ? String(data.question_type)
+    : "multiple";
+  if (type === "truefalse") {
+    return {
+      question: String(data.question || "").trim().slice(0, 400),
+      option_a: "Doğru",
+      option_b: "Yanlış",
+      option_c: "",
+      option_d: "",
+      correct_answer: String(data.correct_answer || "A").toUpperCase() === "B" ? "B" : "A",
+      question_type: type,
+      category: data.category ? String(data.category).trim().slice(0, 60) : undefined,
+    };
+  }
+  if (type === "fill") {
+    return {
+      question: String(data.question || "").trim().slice(0, 400),
+      option_a: String(data.option_a || "").trim().slice(0, 200),
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_answer: "A",
+      question_type: type,
+      category: data.category ? String(data.category).trim().slice(0, 60) : undefined,
+    };
+  }
   return {
+    question_type: type,
     question: String(data.question || "").trim().slice(0, 400),
     option_a: String(data.option_a || "").trim().slice(0, 200),
     option_b: String(data.option_b || "").trim().slice(0, 200),
@@ -185,7 +215,7 @@ export const duplicateQuestion = createServerFn({ method: "POST" })
     const supabase = await db();
     const { data: src, error: readError } = await supabase
       .from("questions")
-      .select("question, option_a, option_b, option_c, option_d, correct_answer, category, difficulty, time_limit, set_id")
+      .select("question, option_a, option_b, option_c, option_d, correct_answer, question_type, category, difficulty, time_limit, set_id")
       .eq("id", data.id)
       .maybeSingle();
     if (readError || !src) throw new Error("Soru bulunamadı");
